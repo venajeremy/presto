@@ -1,0 +1,207 @@
+package com.facebook.presto.iceberg;
+
+import com.facebook.presto.Session;
+import com.facebook.presto.hadoop.$internal.org.apache.commons.io.FileUtils;
+import com.facebook.presto.testing.QueryRunner;
+import com.facebook.presto.tests.AbstractTestQueryFramework;
+import com.google.common.collect.ImmutableMap;
+import org.apache.avro.Schema;
+import org.apache.avro.file.DataFileReader;
+import org.apache.avro.file.DataFileWriter;
+import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.generic.GenericDatumWriter;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.*;
+import org.testng.annotations.AfterClass;
+
+import java.io.File;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.FileSystems;
+
+import static java.lang.String.format;
+import static java.nio.file.Files.*;
+
+public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFramework {
+    protected static final String ICEBERG_V3 = "iceberg_v3";
+
+    private static final String METADATA = "metadata";
+    private static final String PATHPLACEHOLDER = "FILEPATH";
+    private QueryRunner queryRunner;
+
+    @Override
+    protected QueryRunner createQueryRunner()
+            throws Exception
+    {
+        queryRunner = IcebergQueryRunner.builder().setExtraProperties(ImmutableMap.of(
+                "experimental.pushdown-subfields-enabled", "true",
+                "experimental.pushdown-dereference-enabled", "true")).build().getQueryRunner();
+
+        setupIcebergSchema(ICEBERG_V3, queryRunner);
+
+        return queryRunner;
+    }
+
+    @AfterClass
+    public void deleteTestDeltaTables()
+    {
+        QueryRunner queryRunner = getQueryRunner();
+        closeIcebergSchema(ICEBERG_V3, queryRunner);
+    }
+
+    private static void setupIcebergSchema(String schema, QueryRunner queryRunner){
+        if(queryRunner != null) {
+            queryRunner.execute(format(
+                    "CREATE SCHEMA IF NOT EXISTS iceberg.%s",
+                    schema));
+        }
+    }
+
+    private static void closeIcebergSchema(String schema, QueryRunner queryRunner){
+        if(queryRunner != null){
+            queryRunner.execute(format(
+                    "DROP SCHEMA IF EXISTS iceberg.%s",
+                    schema));
+        }
+    }
+
+    protected String setupIcebergTable(String catalogName, String testName)
+    {
+
+        String tablePath = goldenTablePathWithPrefix(catalogName, testName);
+        // Create temp directory
+        File tempDirectory = null;
+
+        try {
+            tempDirectory = createTempDirectory("IcebergTemporaryTable").toFile();
+            File tempTable = new File(tempDirectory, testName);
+            FileUtils.copyDirectory(new File(tablePath), tempTable);
+
+            // Save temp directory and table
+            String activeTableParent = tempDirectory.getAbsolutePath();
+            String activeTable = tempTable.getAbsolutePath();
+
+            File tempMetadata = new File(tempTable, METADATA);
+
+            // Update all .avro files
+            File[] avroFiles = tempMetadata.listFiles((dir, name) -> name.endsWith(".avro"));
+            for(File avroFile : avroFiles){
+                // Load avro files
+                try (DataFileReader<GenericRecord> reader = new DataFileReader<>(avroFile, new GenericDatumReader<>())) {
+                    // Convert avro to json
+                    String json = avroToJson(reader);
+
+                    // String replace
+                    json = json.replace(PATHPLACEHOLDER, activeTable);
+
+                    // Convert json to avro and update existing avroFile
+                    jsonToAvro(json, reader, avroFile.getAbsolutePath());
+                }
+            }
+
+            // Update all .metadata.json files
+            File[] jsonFiles = tempMetadata.listFiles((dir, name) -> name.endsWith(".json"));
+            for(File jsonFile : jsonFiles){
+                // Use java Files to read file
+                String fileContent = new String(readAllBytes(jsonFile.toPath()));
+                // Replace the placeholder with absolute path
+                fileContent = fileContent.replace(PATHPLACEHOLDER, activeTable);
+                // Write json back to file
+                write(jsonFile.toPath(), fileContent.getBytes());
+            }
+
+            // Add table to schema
+            Session session = Session.builder(getSession()).build();
+            String queryCreate = format("call iceberg.system.register_table(" +
+                    "  schema => '%s', " +
+                    "  table_name => '%s', " +
+                    "  metadata_location => 'file://%s' " +
+                    ")", catalogName, testName, activeTable);
+            computeActual(session, queryCreate);
+
+            return activeTableParent;
+
+        }
+        catch (Exception e) {
+            // Delete temp directory
+            if(tempDirectory != null){
+                try {
+                    FileUtils.deleteDirectory(tempDirectory);
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    protected void closeIcebergTable(String catalogName, String testName, String activeTableDirectory){
+
+        // Remove table from schema
+        Session session = Session.builder(getSession()).build();
+        String queryDrop = format("drop table if exists %s.%s", catalogName, testName);
+        computeActual(session, queryDrop);
+
+        // Delete table from temp directory
+        if(activeTableDirectory != null){
+            try{
+                FileUtils.deleteDirectory(new File(activeTableDirectory));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+    }
+
+    private void jsonToAvro(String json, DataFileReader<GenericRecord> reader, String avroAbsolutePath){
+        try {
+            // Get avro file schema
+            Schema schema = reader.getSchema();
+
+            JsonDecoder decoder = DecoderFactory.get().jsonDecoder(schema, json);
+            DatumReader<GenericRecord> datumReader = new GenericDatumReader<>(schema);
+            GenericRecord updated = datumReader.read(null, decoder);
+
+            try(DataFileWriter<GenericRecord> fileWriter = new DataFileWriter<>(new GenericDatumWriter<>(schema))){
+                fileWriter.create(schema, new File(avroAbsolutePath));
+                fileWriter.append(updated);
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String avroToJson(DataFileReader<GenericRecord> reader){
+        try{
+            // Get avro file schema
+            Schema schema = reader.getSchema();
+            GenericRecord record = reader.next();
+
+            // Convert to JSON
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            DatumWriter<GenericRecord> writer = new GenericDatumWriter<>(schema);
+            JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, baos, true);
+            writer.write(record, encoder);
+            encoder.flush();
+
+            return baos.toString();
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    protected static String goldenTablePath(String tableName)
+    {
+        return IcebergImportedTableTestBase.class.getClassLoader().getResource(tableName).getPath();
+    }
+
+    protected static String goldenTablePathWithPrefix(String prefix, String tableName)
+    {
+        return goldenTablePath(prefix + FileSystems.getDefault().getSeparator() + tableName);
+    }
+}

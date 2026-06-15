@@ -496,6 +496,11 @@ public final class IcebergUtil
             return HiveType.HIVE_LONG;
         }
 
+        // Special handling for GEOMETRY type: use binary instead of 'string'
+        if (icebergType.typeId() == org.apache.iceberg.types.Type.TypeID.GEOMETRY) {
+            return HiveType.HIVE_BINARY;
+        }
+
         return HiveType.toHiveType(HiveSchemaUtil.convert(icebergType));
     }
 
