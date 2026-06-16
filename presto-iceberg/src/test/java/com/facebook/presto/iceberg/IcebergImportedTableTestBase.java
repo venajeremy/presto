@@ -1,7 +1,19 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.facebook.presto.iceberg;
 
 import com.facebook.presto.Session;
-import com.facebook.presto.hadoop.$internal.org.apache.commons.io.FileUtils;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestQueryFramework;
 import com.google.common.collect.ImmutableMap;
@@ -11,18 +23,28 @@ import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.io.*;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.DatumWriter;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.io.EncoderFactory;
+import org.apache.avro.io.JsonDecoder;
+import org.apache.avro.io.JsonEncoder;
+import org.apache.commons.io.FileUtils;
 import org.testng.annotations.AfterClass;
 
-import java.io.File;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 
 import static java.lang.String.format;
-import static java.nio.file.Files.*;
+import static java.nio.file.Files.createTempDirectory;
+import static java.nio.file.Files.readAllBytes;
+import static java.nio.file.Files.write;
 
-public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFramework {
+public abstract class IcebergImportedTableTestBase
+        extends AbstractTestQueryFramework
+{
     protected static final String ICEBERG_V3 = "iceberg_v3";
 
     private static final String METADATA = "metadata";
@@ -49,16 +71,18 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
         closeIcebergSchema(ICEBERG_V3, queryRunner);
     }
 
-    private static void setupIcebergSchema(String schema, QueryRunner queryRunner){
-        if(queryRunner != null) {
+    private static void setupIcebergSchema(String schema, QueryRunner queryRunner)
+    {
+        if (queryRunner != null) {
             queryRunner.execute(format(
                     "CREATE SCHEMA IF NOT EXISTS iceberg.%s",
                     schema));
         }
     }
 
-    private static void closeIcebergSchema(String schema, QueryRunner queryRunner){
-        if(queryRunner != null){
+    private static void closeIcebergSchema(String schema, QueryRunner queryRunner)
+    {
+        if (queryRunner != null) {
             queryRunner.execute(format(
                     "DROP SCHEMA IF EXISTS iceberg.%s",
                     schema));
@@ -67,8 +91,8 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
 
     protected String setupIcebergTable(String catalogName, String testName)
     {
-
         String tablePath = goldenTablePathWithPrefix(catalogName, testName);
+
         // Create temp directory
         File tempDirectory = null;
 
@@ -85,7 +109,7 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
 
             // Update all .avro files
             File[] avroFiles = tempMetadata.listFiles((dir, name) -> name.endsWith(".avro"));
-            for(File avroFile : avroFiles){
+            for (File avroFile : avroFiles) {
                 // Load avro files
                 try (DataFileReader<GenericRecord> reader = new DataFileReader<>(avroFile, new GenericDatumReader<>())) {
                     // Convert avro to json
@@ -101,7 +125,7 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
 
             // Update all .metadata.json files
             File[] jsonFiles = tempMetadata.listFiles((dir, name) -> name.endsWith(".json"));
-            for(File jsonFile : jsonFiles){
+            for (File jsonFile : jsonFiles) {
                 // Use java Files to read file
                 String fileContent = new String(readAllBytes(jsonFile.toPath()));
                 // Replace the placeholder with absolute path
@@ -112,50 +136,51 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
 
             // Add table to schema
             Session session = Session.builder(getSession()).build();
-            String queryCreate = format("call iceberg.system.register_table(" +
-                    "  schema => '%s', " +
-                    "  table_name => '%s', " +
-                    "  metadata_location => 'file://%s' " +
+            String queryCreate = format("call iceberg.system.register_table( " +
+                    "schema => '%s', " +
+                    "table_name => '%s', " +
+                    "metadata_location => 'file://%s'" +
                     ")", catalogName, testName, activeTable);
             computeActual(session, queryCreate);
 
             return activeTableParent;
-
         }
+
         catch (Exception e) {
             // Delete temp directory
-            if(tempDirectory != null){
+            if (tempDirectory != null) {
                 try {
                     FileUtils.deleteDirectory(tempDirectory);
-                } catch (IOException ex) {
+                }
+                catch (IOException ex) {
                     throw new RuntimeException(ex);
                 }
             }
 
             throw new RuntimeException(e);
         }
-
     }
 
-    protected void closeIcebergTable(String catalogName, String testName, String activeTableDirectory){
-
+    protected void closeIcebergTable(String catalogName, String testName, String activeTableDirectory)
+    {
         // Remove table from schema
         Session session = Session.builder(getSession()).build();
         String queryDrop = format("drop table if exists %s.%s", catalogName, testName);
         computeActual(session, queryDrop);
 
         // Delete table from temp directory
-        if(activeTableDirectory != null){
-            try{
+        if (activeTableDirectory != null) {
+            try {
                 FileUtils.deleteDirectory(new File(activeTableDirectory));
-            } catch (IOException e) {
+            }
+            catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }
-
     }
 
-    private void jsonToAvro(String json, DataFileReader<GenericRecord> reader, String avroAbsolutePath){
+    private void jsonToAvro(String json, DataFileReader<GenericRecord> reader, String avroAbsolutePath)
+    {
         try {
             // Get avro file schema
             Schema schema = reader.getSchema();
@@ -164,18 +189,19 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
             DatumReader<GenericRecord> datumReader = new GenericDatumReader<>(schema);
             GenericRecord updated = datumReader.read(null, decoder);
 
-            try(DataFileWriter<GenericRecord> fileWriter = new DataFileWriter<>(new GenericDatumWriter<>(schema))){
+            try (DataFileWriter<GenericRecord> fileWriter = new DataFileWriter<>(new GenericDatumWriter<>(schema))) {
                 fileWriter.create(schema, new File(avroAbsolutePath));
                 fileWriter.append(updated);
             }
-
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    private String avroToJson(DataFileReader<GenericRecord> reader){
-        try{
+    private String avroToJson(DataFileReader<GenericRecord> reader)
+    {
+        try {
             // Get avro file schema
             Schema schema = reader.getSchema();
             GenericRecord record = reader.next();
@@ -188,11 +214,10 @@ public abstract class IcebergImportedTableTestBase extends AbstractTestQueryFram
             encoder.flush();
 
             return baos.toString();
-
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new RuntimeException(e);
         }
-
     }
 
     protected static String goldenTablePath(String tableName)
