@@ -68,7 +68,9 @@ public abstract class IcebergImportedTableTestBase
     public void deleteSchema()
     {
         QueryRunner queryRunner = getQueryRunner();
-        dropSchema(ICEBERG_V3, queryRunner);
+        if(queryRunner != null) {
+            dropSchema(ICEBERG_V3, queryRunner);
+        }
     }
 
     private static void createSchema(String schema, QueryRunner queryRunner)
@@ -95,6 +97,7 @@ public abstract class IcebergImportedTableTestBase
 
         // Create temp directory
         File tempDirectory = null;
+        String activeTableParent = null;
 
         try {
             tempDirectory = createTempDirectory("IcebergTemporaryTable").toFile();
@@ -102,10 +105,14 @@ public abstract class IcebergImportedTableTestBase
             FileUtils.copyDirectory(new File(tablePath), tempTable);
 
             // Save temp directory and table
-            String activeTableParent = tempDirectory.getAbsolutePath();
+            activeTableParent = tempDirectory.getAbsolutePath();
             String activeTable = tempTable.getAbsolutePath();
 
             File tempMetadata = new File(tempTable, METADATA);
+
+            if(!tempMetadata.isDirectory()){
+                throw new RuntimeException("Metadata folder does not exist in iceberg table at: "+tempDirectory);
+            }
 
             // Update all .avro files
             File[] avroFiles = tempMetadata.listFiles((dir, name) -> name.endsWith(".avro"));
@@ -148,15 +155,7 @@ public abstract class IcebergImportedTableTestBase
 
         catch (Exception e) {
             // Delete temp directory
-            if (tempDirectory != null) {
-                try {
-                    FileUtils.deleteDirectory(tempDirectory);
-                }
-                catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
-            }
-
+            dropAndCleanupTable(catalogName, testName, activeTableParent);
             throw new RuntimeException(e);
         }
     }
@@ -204,14 +203,19 @@ public abstract class IcebergImportedTableTestBase
         try {
             // Get avro file schema
             Schema schema = reader.getSchema();
-            GenericRecord record = reader.next();
 
             // Convert to JSON
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DatumWriter<GenericRecord> writer = new GenericDatumWriter<>(schema);
+
+            // Create JSON encoder
             JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, baos, true);
-            writer.write(record, encoder);
-            encoder.flush();
+
+            while(reader.hasNext()){
+                GenericRecord record = reader.next();
+                writer.write(record, encoder);
+                encoder.flush();
+            }
 
             return baos.toString();
         }
@@ -222,7 +226,11 @@ public abstract class IcebergImportedTableTestBase
 
     protected static String goldenTablePath(String tableName)
     {
-        return IcebergImportedTableTestBase.class.getClassLoader().getResource(tableName).getPath();
+        String path = IcebergImportedTableTestBase.class.getClassLoader().getResource(tableName).getPath();
+        if(path == null){
+            throw new RuntimeException("Failed to located path for resource: "+tableName);
+        }
+        return path;
     }
 
     protected static String goldenTablePathWithPrefix(String prefix, String tableName)

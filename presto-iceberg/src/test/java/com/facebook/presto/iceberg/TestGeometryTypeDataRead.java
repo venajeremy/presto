@@ -42,7 +42,7 @@ public class TestGeometryTypeDataRead
     }
 
     @Test
-    public void readGeometryDataTypeFromImportedTable()
+    public void readGeomDataType()
     {
         // Create session
         Session session = Session.builder(getSession()).build();
@@ -54,5 +54,6 @@ public class TestGeometryTypeDataRead
         // Confirm geometry read
         assertEquals(resultSelect.getTypes().get(1), GeometryType.GEOMETRY);
         assertEquals(resultSelect.getMaterializedRows().get(0).getField(1), "MULTIPOINT ((1 2))");
+        assertEquals(resultSelect.getMaterializedRows().get(1).getField(1), "MULTIPOINT ((3 4))");
     }
 }

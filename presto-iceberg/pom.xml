@@ -804,6 +804,7 @@
                         <ignoredNonTestScopedDependency>com.facebook.airlift:node</ignoredNonTestScopedDependency>
                         <ignoredNonTestScopedDependency>org.projectnessie.nessie:nessie-model</ignoredNonTestScopedDependency>
                         <ignoredNonTestScopedDependency>org.apache.httpcomponents.core5:httpcore5</ignoredNonTestScopedDependency>
+                        <!-- Ignores needed for presto-main-base compile scope -->
                         <ignoredNonTestScopedDependency>com.facebook.presto:presto-main-base</ignoredNonTestScopedDependency>
                         <ignoredNonTestScopedDependency>commons-io:commons-io</ignoredNonTestScopedDependency>
                         <ignoredNonTestScopedDependency>org.apache.commons:commons-math3</ignoredNonTestScopedDependency>
