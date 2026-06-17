@@ -32,13 +32,13 @@ public class TestGeometryTypeDataRead
     @BeforeMethod
     public void setup()
     {
-        tablePath = setupIcebergTable(ICEBERG_V3, testName);
+        tablePath = setupAndRegisterTable(ICEBERG_V3, testName);
     }
 
     @AfterMethod(alwaysRun = true)
     public void teardown()
     {
-        closeIcebergTable(ICEBERG_V3, testName, tablePath);
+        dropAndCleanupTable(ICEBERG_V3, testName, tablePath);
     }
 
     @Test

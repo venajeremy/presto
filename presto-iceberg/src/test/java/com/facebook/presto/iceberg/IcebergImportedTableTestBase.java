@@ -59,19 +59,19 @@ public abstract class IcebergImportedTableTestBase
                 "experimental.pushdown-subfields-enabled", "true",
                 "experimental.pushdown-dereference-enabled", "true")).build().getQueryRunner();
 
-        setupIcebergSchema(ICEBERG_V3, queryRunner);
+        createSchema(ICEBERG_V3, queryRunner);
 
         return queryRunner;
     }
 
     @AfterClass
-    public void deleteTestDeltaTables()
+    public void deleteSchema()
     {
         QueryRunner queryRunner = getQueryRunner();
-        closeIcebergSchema(ICEBERG_V3, queryRunner);
+        dropSchema(ICEBERG_V3, queryRunner);
     }
 
-    private static void setupIcebergSchema(String schema, QueryRunner queryRunner)
+    private static void createSchema(String schema, QueryRunner queryRunner)
     {
         if (queryRunner != null) {
             queryRunner.execute(format(
@@ -80,7 +80,7 @@ public abstract class IcebergImportedTableTestBase
         }
     }
 
-    private static void closeIcebergSchema(String schema, QueryRunner queryRunner)
+    private static void dropSchema(String schema, QueryRunner queryRunner)
     {
         if (queryRunner != null) {
             queryRunner.execute(format(
@@ -89,7 +89,7 @@ public abstract class IcebergImportedTableTestBase
         }
     }
 
-    protected String setupIcebergTable(String catalogName, String testName)
+    protected String setupAndRegisterTable(String catalogName, String testName)
     {
         String tablePath = goldenTablePathWithPrefix(catalogName, testName);
 
@@ -161,7 +161,7 @@ public abstract class IcebergImportedTableTestBase
         }
     }
 
-    protected void closeIcebergTable(String catalogName, String testName, String activeTableDirectory)
+    protected void dropAndCleanupTable(String catalogName, String testName, String activeTableDirectory)
     {
         // Remove table from schema
         Session session = Session.builder(getSession()).build();
