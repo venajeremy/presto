@@ -262,8 +262,8 @@ Avro Configuration Properties
 
 When querying or creating Avro-formatted tables with the Hive connector, you may need to supply or override the Avro schema. In addition, Hive Metastore, especially Hive 3.x, must be configured to read storage schemas for Avro tables.
 
-Table Properties
-^^^^^^^^^^^^^^^^
+Avro Table Properties
+^^^^^^^^^^^^^^^^^^^^^
 
 These properties can be used when creating or querying Avro tables in Presto:
 
@@ -303,8 +303,8 @@ You must restart the metastore service for this configuration to take effect. Th
 Textfile Configuration Properties
 ---------------------------------
 
-Table Properties
-^^^^^^^^^^^^^^^^
+Textfile Table Properties
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 These properties can be used when creating TEXTFILE tables in Presto:
 
