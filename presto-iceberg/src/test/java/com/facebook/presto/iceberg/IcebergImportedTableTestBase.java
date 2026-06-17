@@ -68,7 +68,7 @@ public abstract class IcebergImportedTableTestBase
     public void deleteSchema()
     {
         QueryRunner queryRunner = getQueryRunner();
-        if(queryRunner != null) {
+        if (queryRunner != null) {
             dropSchema(ICEBERG_V3, queryRunner);
         }
     }
@@ -110,8 +110,8 @@ public abstract class IcebergImportedTableTestBase
 
             File tempMetadata = new File(tempTable, METADATA);
 
-            if(!tempMetadata.isDirectory()){
-                throw new RuntimeException("Metadata folder does not exist in iceberg table at: "+tempDirectory);
+            if (!tempMetadata.isDirectory()) {
+                throw new RuntimeException("Metadata folder does not exist in iceberg table at: " + tempDirectory);
             }
 
             // Update all .avro files
@@ -211,7 +211,7 @@ public abstract class IcebergImportedTableTestBase
             // Create JSON encoder
             JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, baos, true);
 
-            while(reader.hasNext()){
+            while (reader.hasNext()) {
                 GenericRecord record = reader.next();
                 writer.write(record, encoder);
                 encoder.flush();
@@ -227,8 +227,8 @@ public abstract class IcebergImportedTableTestBase
     protected static String goldenTablePath(String tableName)
     {
         String path = IcebergImportedTableTestBase.class.getClassLoader().getResource(tableName).getPath();
-        if(path == null){
-            throw new RuntimeException("Failed to located path for resource: "+tableName);
+        if (path == null) {
+            throw new RuntimeException("Failed to located path for resource: " + tableName);
         }
         return path;
     }
