@@ -26,7 +26,7 @@ import static org.testng.Assert.assertEquals;
 public class TestGeometryTypeDataRead
         extends IcebergImportedTableTestBase
 {
-    private final String testName = "geometryDataTypeRead";
+    private final String testName = "geometry_data_type_read";
     private String tablePath;
 
     @BeforeMethod
@@ -46,6 +46,16 @@ public class TestGeometryTypeDataRead
     {
         // Create session
         Session session = Session.builder(getSession()).build();
+
+        // Assert schema creation
+        String querySchema = format("SELECT 1 FROM iceberg.information_schema.schemata WHERE schema_name = '%s'", ICEBERG_V3);
+        MaterializedResult resultSchema = computeActual(session, querySchema);
+        assertEquals(resultSchema.getMaterializedRows().get(0).getField(0), 1);
+
+        // Assert table creation
+        String queryTable = format("SELECT 1 FROM iceberg.information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'", ICEBERG_V3, testName);
+        MaterializedResult resultTable = computeActual(session, queryTable);
+        assertEquals(resultTable.getMaterializedRows().get(0).getField(0), 1);
 
         // Read geometry type
         String querySelect = format("select * from iceberg.%s.%s", ICEBERG_V3, testName);

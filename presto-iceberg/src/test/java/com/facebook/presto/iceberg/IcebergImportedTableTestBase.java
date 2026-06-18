@@ -36,6 +36,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystems;
+import java.util.ArrayList;
+import java.util.List;
 
 import static java.lang.String.format;
 import static java.nio.file.Files.createTempDirectory;
@@ -117,17 +119,26 @@ public abstract class IcebergImportedTableTestBase
             // Update all .avro files
             File[] avroFiles = tempMetadata.listFiles((dir, name) -> name.endsWith(".avro"));
             for (File avroFile : avroFiles) {
+                List<String> jsonRecords;
+                Schema schema;
+
                 // Load avro files
                 try (DataFileReader<GenericRecord> reader = new DataFileReader<>(avroFile, new GenericDatumReader<>())) {
+                    // Get avro file schema
+                    schema = reader.getSchema();
+
                     // Convert avro to json
-                    String json = avroToJson(reader);
-
-                    // String replace
-                    json = json.replace(PATHPLACEHOLDER, activeTable);
-
-                    // Convert json to avro and update existing avroFile
-                    jsonToAvro(json, reader, avroFile.getAbsolutePath());
+                    jsonRecords = avroToJson(reader, schema);
                 }
+
+                // String replace
+                List<String> updatedJsonRecords = new ArrayList<>();
+                for (String record : jsonRecords) {
+                    updatedJsonRecords.add(record.replace(PATHPLACEHOLDER, activeTable));
+                }
+
+                // Convert json to avro and update existing avroFile
+                jsonToAvro(updatedJsonRecords, avroFile.getAbsolutePath(), schema);
             }
 
             // Update all .metadata.json files
@@ -143,7 +154,7 @@ public abstract class IcebergImportedTableTestBase
 
             // Add table to schema
             Session session = Session.builder(getSession()).build();
-            String queryCreate = format("call iceberg.system.register_table( " +
+            String queryCreate = format("CALL iceberg.system.register_table( " +
                     "schema => '%s', " +
                     "table_name => '%s', " +
                     "metadata_location => 'file://%s'" +
@@ -164,7 +175,7 @@ public abstract class IcebergImportedTableTestBase
     {
         // Remove table from schema
         Session session = Session.builder(getSession()).build();
-        String queryDrop = format("drop table if exists %s.%s", catalogName, testName);
+        String queryDrop = format("DROP TABLE IF EXISTS %s.%s", catalogName, testName);
         computeActual(session, queryDrop);
 
         // Delete table from temp directory
@@ -178,18 +189,15 @@ public abstract class IcebergImportedTableTestBase
         }
     }
 
-    private void jsonToAvro(String json, DataFileReader<GenericRecord> reader, String avroAbsolutePath)
+    private void jsonToAvro(List<String> json, String avroAbsolutePath, Schema schema)
     {
-        try {
-            // Get avro file schema
-            Schema schema = reader.getSchema();
-
-            JsonDecoder decoder = DecoderFactory.get().jsonDecoder(schema, json);
+        try (DataFileWriter<GenericRecord> fileWriter = new DataFileWriter<>(new GenericDatumWriter<>(schema))) {
             DatumReader<GenericRecord> datumReader = new GenericDatumReader<>(schema);
-            GenericRecord updated = datumReader.read(null, decoder);
+            fileWriter.create(schema, new File(avroAbsolutePath));
 
-            try (DataFileWriter<GenericRecord> fileWriter = new DataFileWriter<>(new GenericDatumWriter<>(schema))) {
-                fileWriter.create(schema, new File(avroAbsolutePath));
+            for (String jsonRecord : json) {
+                JsonDecoder decoder = DecoderFactory.get().jsonDecoder(schema, jsonRecord);
+                GenericRecord updated = datumReader.read(null, decoder);
                 fileWriter.append(updated);
             }
         }
@@ -198,26 +206,27 @@ public abstract class IcebergImportedTableTestBase
         }
     }
 
-    private String avroToJson(DataFileReader<GenericRecord> reader)
+    private List<String> avroToJson(DataFileReader<GenericRecord> reader, Schema schema)
     {
         try {
-            // Get avro file schema
-            Schema schema = reader.getSchema();
-
-            // Convert to JSON
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
             DatumWriter<GenericRecord> writer = new GenericDatumWriter<>(schema);
 
-            // Create JSON encoder
-            JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, baos, true);
+            List<String> outputJson = new ArrayList<>();
 
             while (reader.hasNext()) {
                 GenericRecord record = reader.next();
+
+                // Create output stream and encoder
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, baos, true);
+
                 writer.write(record, encoder);
                 encoder.flush();
+
+                outputJson.add(baos.toString());
             }
 
-            return baos.toString();
+            return outputJson;
         }
         catch (Exception e) {
             throw new RuntimeException(e);
