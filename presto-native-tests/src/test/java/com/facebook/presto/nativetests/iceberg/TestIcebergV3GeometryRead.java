@@ -11,21 +11,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.iceberg;
+package com.facebook.presto.nativetests.iceberg;
 
 import com.facebook.presto.Session;
 import com.facebook.presto.geospatial.type.GeometryType;
+import com.facebook.presto.iceberg.IcebergImportedTableTestBase;
 import com.facebook.presto.testing.MaterializedResult;
 import com.facebook.presto.testing.QueryRunner;
-import com.google.common.collect.ImmutableMap;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
+import static com.facebook.presto.nativeworker.PrestoNativeQueryRunnerUtils.ICEBERG_DEFAULT_STORAGE_FORMAT;
+import static com.facebook.presto.nativeworker.PrestoNativeQueryRunnerUtils.nativeIcebergQueryRunnerBuilder;
 import static java.lang.String.format;
 import static org.testng.Assert.assertEquals;
 
-public class TestGeometryTypeDataRead
+/**
+ * Tests for Iceberg Format Version 3 Geometry Type Read Using IcebergImportedTableTestBase to Create Table With Existing Values
+ */
+public class TestIcebergV3GeometryRead
         extends IcebergImportedTableTestBase
 {
     private final String testName = "geometry_data_type_read";
@@ -34,9 +39,10 @@ public class TestGeometryTypeDataRead
     @Override
     protected QueryRunner chooseQueryRunner() throws Exception
     {
-        return IcebergQueryRunner.builder().setExtraProperties(ImmutableMap.of(
-                "experimental.pushdown-subfields-enabled", "true",
-                "experimental.pushdown-dereference-enabled", "true")).build().getQueryRunner();
+        return nativeIcebergQueryRunnerBuilder()
+                .setStorageFormat(ICEBERG_DEFAULT_STORAGE_FORMAT)
+                .setAddStorageFormatToPath(true)
+                .build();
     }
 
     @BeforeMethod
@@ -52,7 +58,7 @@ public class TestGeometryTypeDataRead
     }
 
     @Test
-    public void readGeomDataType()
+    public void nativeReadGeometryType()
     {
         // Create session
         Session session = Session.builder(getSession()).build();

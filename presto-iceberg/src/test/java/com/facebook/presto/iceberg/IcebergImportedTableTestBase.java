@@ -16,7 +16,6 @@ package com.facebook.presto.iceberg;
 import com.facebook.presto.Session;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestQueryFramework;
-import com.google.common.collect.ImmutableMap;
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.file.DataFileWriter;
@@ -47,21 +46,21 @@ import static java.nio.file.Files.write;
 public abstract class IcebergImportedTableTestBase
         extends AbstractTestQueryFramework
 {
-    protected static final String ICEBERG_V3 = "iceberg_v3";
+    protected static final String SCHEMANAME = "iceberg_v3";
 
     private static final String METADATA = "metadata";
     private static final String PATHPLACEHOLDER = "FILEPATH";
     private QueryRunner queryRunner;
 
+    protected abstract QueryRunner chooseQueryRunner() throws Exception;
+
     @Override
-    protected QueryRunner createQueryRunner()
+    protected final QueryRunner createQueryRunner()
             throws Exception
     {
-        queryRunner = IcebergQueryRunner.builder().setExtraProperties(ImmutableMap.of(
-                "experimental.pushdown-subfields-enabled", "true",
-                "experimental.pushdown-dereference-enabled", "true")).build().getQueryRunner();
+        queryRunner = chooseQueryRunner();
 
-        createSchema(ICEBERG_V3, queryRunner);
+        createSchema(SCHEMANAME, queryRunner);
 
         return queryRunner;
     }
@@ -71,7 +70,7 @@ public abstract class IcebergImportedTableTestBase
     {
         QueryRunner queryRunner = getQueryRunner();
         if (queryRunner != null) {
-            dropSchema(ICEBERG_V3, queryRunner);
+            dropSchema(SCHEMANAME, queryRunner);
         }
     }
 
@@ -93,9 +92,9 @@ public abstract class IcebergImportedTableTestBase
         }
     }
 
-    protected String setupAndRegisterTable(String catalogName, String testName)
+    protected String setupAndRegisterTable(String testName)
     {
-        String tablePath = goldenTablePathWithPrefix(catalogName, testName);
+        String tablePath = goldenTablePathWithPrefix(SCHEMANAME, testName);
 
         // Create temp directory
         File tempDirectory = null;
@@ -158,7 +157,7 @@ public abstract class IcebergImportedTableTestBase
                     "schema => '%s', " +
                     "table_name => '%s', " +
                     "metadata_location => 'file://%s'" +
-                    ")", catalogName, testName, activeTable);
+                    ")", SCHEMANAME, testName, activeTable);
             computeActual(session, queryCreate);
 
             return activeTableParent;
@@ -166,16 +165,16 @@ public abstract class IcebergImportedTableTestBase
 
         catch (Exception e) {
             // Delete temp directory
-            dropAndCleanupTable(catalogName, testName, activeTableParent);
+            dropAndCleanupTable(testName, activeTableParent);
             throw new RuntimeException(e);
         }
     }
 
-    protected void dropAndCleanupTable(String catalogName, String testName, String activeTableDirectory)
+    protected void dropAndCleanupTable(String testName, String activeTableDirectory)
     {
         // Remove table from schema
         Session session = Session.builder(getSession()).build();
-        String queryDrop = format("DROP TABLE IF EXISTS %s.%s", catalogName, testName);
+        String queryDrop = format("DROP TABLE IF EXISTS %s.%s", SCHEMANAME, testName);
         computeActual(session, queryDrop);
 
         // Delete table from temp directory
