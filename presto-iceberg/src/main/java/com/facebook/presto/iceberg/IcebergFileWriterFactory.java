@@ -69,6 +69,7 @@ import static com.facebook.presto.iceberg.IcebergSessionProperties.getParquetWri
 import static com.facebook.presto.iceberg.IcebergSessionProperties.getParquetWriterPageSize;
 import static com.facebook.presto.iceberg.IcebergSessionProperties.getParquetWriterVersion;
 import static com.facebook.presto.iceberg.TypeConverter.toOrcType;
+import static com.facebook.presto.iceberg.TypeConverter.toParquetType;
 import static com.facebook.presto.iceberg.TypeConverter.toPrestoType;
 import static com.facebook.presto.iceberg.util.PrimitiveTypeMapBuilder.makeTypeMap;
 import static com.facebook.presto.orc.NoOpOrcWriterStats.NOOP_WRITER_STATS;
@@ -142,6 +143,11 @@ public class IcebergFileWriterFactory
         List<Type> fileColumnTypes = icebergSchema.columns().stream()
                 .map(column -> toPrestoType(column.type(), typeManager))
                 .collect(toImmutableList());
+        Schema parquetSchema = new Schema(icebergSchema.columns().stream()
+                .map(column -> Types.NestedField.from(column)
+                .ofType(toParquetType(column.type()))
+                .build())
+                .collect(toImmutableList()));
 
         try {
             FileSystem fileSystem = hdfsEnvironment.getFileSystem(session.getUser(), outputPath, jobConf);
@@ -162,7 +168,7 @@ public class IcebergFileWriterFactory
                     rollbackAction,
                     fileColumnNames,
                     fileColumnTypes,
-                    convert(icebergSchema, "table"),
+                    convert(parquetSchema, "table"),
                     makeTypeMap(fileColumnTypes, fileColumnNames),
                     parquetWriterOptions,
                     IntStream.range(0, fileColumnNames.size()).toArray(),

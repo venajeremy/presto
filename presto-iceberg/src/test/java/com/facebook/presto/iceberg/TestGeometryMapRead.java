@@ -62,7 +62,7 @@ public class TestGeometryMapRead
     }
 
     @Test
-    public void readGeomRowType()
+    public void readGeomMapType()
     {
         // Assert schema creation
         String querySchema = format("SELECT 1 FROM %s.information_schema.schemata WHERE schema_name = '%s'", CATALOGNAME, SCHEMANAME);

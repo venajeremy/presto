@@ -175,6 +175,35 @@ public final class TypeConverter
         return toIcebergType(type);
     }
 
+    public static org.apache.iceberg.types.Type toParquetType(org.apache.iceberg.types.Type type)
+    {
+        if (type instanceof Types.GeometryType) {
+            return Types.BinaryType.get();
+        }
+        if (type instanceof Types.ListType) {
+            Types.ListType listType = (Types.ListType) type;
+            org.apache.iceberg.types.Type elementType = toParquetType(listType.elementType());
+            return listType.isElementOptional()
+                    ? Types.ListType.ofOptional(listType.elementId(), elementType)
+                    : Types.ListType.ofRequired(listType.elementId(), elementType);
+        }
+        if (type instanceof Types.MapType) {
+            Types.MapType mapType = (Types.MapType) type;
+            return mapType.isValueOptional()
+                    ? Types.MapType.ofOptional(mapType.keyId(), mapType.valueId(), toParquetType(mapType.keyType()), toParquetType(mapType.valueType()))
+                    : Types.MapType.ofRequired(mapType.keyId(), mapType.valueId(), toParquetType(mapType.keyType()), toParquetType(mapType.valueType()));
+        }
+        if (type instanceof Types.StructType) {
+            List<Types.NestedField> fields = ((Types.StructType) type).fields().stream()
+                    .map(field -> field.isOptional()
+                            ? Types.NestedField.optional(field.fieldId(), field.name(), toParquetType(field.type()), field.doc())
+                            : Types.NestedField.required(field.fieldId(), field.name(), toParquetType(field.type()), field.doc()))
+                    .collect(toImmutableList());
+            return Types.StructType.of(fields);
+        }
+        return type;
+    }
+
     public static org.apache.iceberg.types.Type toIcebergType(Type type)
     {
         if (type instanceof BooleanType) {
@@ -227,6 +256,9 @@ public final class TypeConverter
         }
         if (type instanceof UuidType) {
             return Types.UUIDType.get();
+        }
+        if (type instanceof GeometryType) {
+            return Types.GeometryType.crs84();
         }
         throw new PrestoException(NOT_SUPPORTED, "Type not supported for Iceberg: " + type.getDisplayName());
     }

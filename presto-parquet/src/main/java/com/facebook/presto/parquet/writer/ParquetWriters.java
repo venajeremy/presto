@@ -24,6 +24,7 @@ import com.facebook.presto.parquet.writer.valuewriter.CharValueWriter;
 import com.facebook.presto.parquet.writer.valuewriter.DateValueWriter;
 import com.facebook.presto.parquet.writer.valuewriter.DecimalValueWriter;
 import com.facebook.presto.parquet.writer.valuewriter.DoubleValueWriter;
+import com.facebook.presto.parquet.writer.valuewriter.GeometryValueWriter;
 import com.facebook.presto.parquet.writer.valuewriter.IntegerValueWriter;
 import com.facebook.presto.parquet.writer.valuewriter.PrimitiveValueWriter;
 import com.facebook.presto.parquet.writer.valuewriter.RealValueWriter;
@@ -62,6 +63,7 @@ import static com.facebook.presto.common.type.TimestampType.TIMESTAMP;
 import static com.facebook.presto.common.type.TimestampWithTimeZoneType.TIMESTAMP_WITH_TIME_ZONE;
 import static com.facebook.presto.common.type.TinyintType.TINYINT;
 import static com.facebook.presto.common.type.UuidType.UUID;
+import static com.facebook.presto.geospatial.type.GeometryType.GEOMETRY;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -222,6 +224,9 @@ class ParquetWriters
         }
         if (UUID.equals(type)) {
             return new UuidValuesWriter(valuesWriterSupplier, parquetType);
+        }
+        if (GEOMETRY.equals(type)) {
+            return new GeometryValueWriter(valuesWriterSupplier, type, parquetType);
         }
         if (type instanceof VarcharType || type instanceof CharType || type instanceof VarbinaryType) {
             return new CharValueWriter(valuesWriterSupplier, type, parquetType);
